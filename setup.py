@@ -10,7 +10,7 @@ setup(
     entry_points = {
         "console_scripts": ['getmovie = getmovie.getmovie:main']
         },
-    version = "1.0.0",
+    version = "1.0.1",
     description = "Look up movie from YTS",
     long_description = long_descr,
     author = "Steven Smith",

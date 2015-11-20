@@ -44,9 +44,16 @@ def print_multicolumn(alist):
 
 def choice(options, q="Enter your selection: "):
     if len(options) == 1:
-        print("Selecting {}...".format(options[0][1]), file=sys.stderr)
-        return options[0][0]
-    print_multicolumn(["{}: {}".format(a, b) for a,b in options])
+        if type(options[0]) is tuple:
+            print("Selecting {}...".format(options[0][1]), file=sys.stderr)
+        else:
+            print("Selecting {}...".format(options[0]), file=sys.stderr)
+        return options[0][0] if type(options[0]) is tuple else options[0]
+    if type(options[0]) is tuple:
+        choices = ["{}: {}".format(a, b) for a,b in options]
+    else:
+        choices = options
+    print_multicolumn(choices)
     if os.isatty(sys.stdout.fileno()):
         return prompt(q)
 
@@ -58,33 +65,44 @@ def prompt(*objs):
     finally:
         sys.stdout = old_stdout
 
-def get_movie(movie, movie_id="", quality=""):
-    data = requests.get("https://yts.ag/api/v2/list_movies.json", params={"query_term": movie}).json()
-    if "data" in data:
-        results = {m["id"]: m for m in data["data"]["movies"]}
-        picked = movie_id or choice([(k, v["title_long"]) for k,v in results.items()], "Enter movie ID: ")
-        if picked in results:
-            movie = results[picked]
-            torrents = {t["quality"][:-1]: t for t in movie["torrents"]}
-            picked = quality or choice([(k, "") for k in torrents.keys()], "Enter torrent quality: ")
-            if picked[-1] == "p":
-                picked = picked[:-1]
-            if picked in torrents:
-                return torrents[picked]["url"]
-            else:
-                return "Invalid quality choice ({})".format(picked)
+def get_movie(movie="", movie_id="", quality=""):
+    if movie_id:
+        if not movie_id.isdigit():
+            return "ID parameter must be a number"
+        data = requests.get("https://yts.ag/api/v2/movie_details.json", params={"movie_id": movie_id}).json()
+        if "data" in data:
+            movie = data["data"]["movie"]
         else:
-            return "Invalid movie ID choice ({})".format(picked)
+            return "No results for {}".format(movie_id)
     else:
-        return "No results for {}".format(movie)
+        data = requests.get("https://yts.ag/api/v2/list_movies.json", params={"query_term": movie}).json()
+        if "data" in data:
+            results = {m["id"]: m for m in data["data"]["movies"]}
+            picked = movie_id or choice([(k, v["title_long"]) for k,v in results.items()], "Enter movie ID: ")
+            if picked in results:
+                movie = results[picked]
+            else:
+                return "Invalid movie ID choice ({})".format(picked)
+        else:
+            return "No results for {}".format(movie)
+    torrents = {t["quality"].lower(): t for t in movie["torrents"]}
+    picked = quality or choice(list(torrents.keys()), "Enter torrent quality: ")
+    if picked.lower() in torrents:
+        return torrents[picked]["url"]
+    else:
+        return "Invalid quality choice ({})".format(picked)
 
 def main():
     parser = argparse.ArgumentParser(prog="getmovie")
-    parser.add_argument("movie", help="Movie search term")
-    parser.add_argument("-i", help="Specify ID, if you know it")
-    parser.add_argument("-q", help="Specify quality. Defaults to 720p")
+    parser.add_argument("-m", "--movie", help="Movie search term")
+    parser.add_argument("-i", "--id", help="Specify ID, if you know it")
+    parser.add_argument("-q", "--quality", help="Specify quality. Defaults to 720p")
     args = parser.parse_args()
-    print(get_movie(args.movie, movie_id=args.i, quality=args.q))
+    if not args.movie and not args.id:
+        parser.print_usage()
+        print("You need to specify either a movie search term (-m) or a movie ID (-i)")
+        return 30
+    print(get_movie(args.movie, args.id, args.quality))
     return 0
 
 if __name__ == "__main__":
